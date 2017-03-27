@@ -70,7 +70,7 @@ Example entry for a new platform in `db/db_test.cc`. The `TEST_TMPDIR` variable 
 where:
 
   - `n` is the number of worker threads
-  - `i` is the initial number of keys in the data store (half the inital range --- will be rounded up to next power of two)
+  - `i` is the initial number of keys in the data store (half the inital range --- will be rounded up to next power of two). The value should be at least `2^(k+1)`, where `k` is the value of the `CLHT_K` compilation parameter.
   - `u` is the percentage of updates (equally distributed between inserts and deletes)
   - `d` is the duration of the test after intialization (in milliseconds)
   - `w` is the time to wait after the db intialization (in seconds)
