@@ -1,0 +1,15 @@
+results/
+data/
+examples/
+.fuse_hidden*
+build_config.mk
+*.a
+*.o
+*.dylib*
+*.so
+*.so.*
+*_test
+db_bench
+leveldbutil
+.project
+.cproject

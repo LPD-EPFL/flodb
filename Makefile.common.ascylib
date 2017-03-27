@@ -1,0 +1,431 @@
+################
+# Local settings
+################
+
+# Settings for TBB and URCU
+TBB_LIBS      ?= /home/trigonak/code/tbb42_20140122oss/build/linux_intel64_gcc_cc4.8_libc2.17_kernel3.11.0_release
+TBB_INCLUDES  ?= /home/trigonak/code/tbb42_20140122oss/include
+
+URCU_PATH     ?= /home/trigonak/code/urcu/ #path to the URCU installation
+
+# Compiler
+# SOLARIS_CC1 	?= /opt/csw/bin/gcc
+# SOLARIS_CC2 	?= /usr/sfw/bin/gcc
+# TILERA_CC	?= tile-gcc
+# CC ?= gcc
+
+VERSION         ?= O3
+ifeq ($(VERSION),DEBUG)
+	CXXFLAGS	+= -g -DDEBUG -O0
+endif
+ifeq ($(VERSION),SYMBOL)
+	CXXFLAGS	+= -O3 -g
+endif
+ifeq ($(VERSION),O0)
+	CXXFLAGS	+= -O0
+endif
+ifeq ($(VERSION),O1)
+	CXXFLAGS	+= -O1
+endif
+ifeq ($(VERSION),O2)
+	CXXFLAGS	+= -O2
+endif
+ifeq ($(VERSION),O3)
+	CXXFLAGS	+= -O3
+endif
+
+
+# Compile with global lock
+ifeq ($(GRANULARITY),GLOBAL_LOCK)
+     CXXFLAGS	+= -DLL_GLOBAL_LOCK
+     BIN_SUFFIX = _gl
+endif
+ifeq ($(G),GL)
+     CXXFLAGS	+= -DLL_GLOBAL_LOCK
+     BIN_SUFFIX = _gl
+endif
+
+
+CXXFLAGS += -D_GNU_SOURCE
+
+ROOT 		?= .
+BINDIR		?= $(ROOT)/bin
+BUILDIR		?= $(ROOT)/build
+
+# Path to LIBATOMIC_OPS (or to gcc-specific libatomic_ops)
+ifdef LIBAO_HOME
+  LIBAO_INC = $(LIBAO_HOME)/include
+else
+  LIBAO_INC = $(ROOT)/src/atomic_ops
+endif
+
+LIBSSMEM = $(ROOT)/db/ascylib_external
+
+ifeq ($(LOCK),)
+  LOCK          ?= TAS
+endif
+
+ifeq ($(STM),SEQUENTIAL)
+  CXXFLAGS	+= -DSEQUENTIAL
+endif
+ifeq ($(STM),LOCKFREE)
+  CXXFLAGS	+= -DLOCKFREE
+endif
+
+#############################
+# Platform dependent settings
+#############################
+#
+# GCC thread-local storage requires "significant
+# support from the linker (ld), dynamic linker
+# (ld.so), and system libraries (libc.so and libpthread.so), so it is
+# not available everywhere." source: GCC-doc.
+#
+# pthread_spinlock is replaced by pthread_mutex
+# on MacOS X, as it might not be supported.
+# Comment LOCK = MUTEX below to enable.
+
+ifndef OS_NAME
+    OS_NAME = $(shell uname -s)
+endif
+
+ifeq ($(OS_NAME), Darwin)
+    OS = MacOS
+    DEFINES += -UTLS
+    LOCK = MUTEX
+endif
+
+ifeq ($(OS_NAME), Linux)
+    OS = Linux
+    DEFINES += -DTLS
+endif
+
+ifeq ($(OS_NAME), SunOS)
+    OS = Solaris
+    CC = $(SOLARIS_CC1)
+    DEFINES += -DTLS
+endif
+
+ifndef STM
+    CXXFLAGS += -D$(LOCK)
+endif
+
+#################################
+# Management PC specific settings
+#################################
+
+ifndef PC_NAME
+	PC_NAME = $(shell uname -n)
+endif
+
+ifeq ($(PC_NAME), parsasrv1.epfl.ch)
+    PLATFORM_KNOWN = 1
+    OS = Linux
+    CC = $(TILERA_CC)
+    LDFLAGS += -ltmc
+    PLATFORM_NUMA = 1
+    ARCH = tile
+    ARCH_NAME = tile
+endif
+
+ifeq ($(PC_NAME), lpd48core)
+    PLATFORM_KNOWN = 1
+    CC = gcc-4.8
+    CXXFLAGS += -DOPTERON -DPLATFORM_MCORE
+    PLATFORM_NUMA = 1
+endif
+
+ifeq ($(PC_NAME), lpdxeon2680)
+    PLATFORM_KNOWN = 1
+    CXXFLAGS += -DLPDXEON -DPLATFORM_MCORE
+    PLATFORM_NUMA = 1
+endif
+
+ifeq ($(PC_NAME), lpdquad)
+    PLATFORM_KNOWN = 1
+    CXXFLAGS += -DLPDQUAD -DPLATFORM_MCORE
+    PLATFORM_NUMA = 1
+endif
+
+ifeq ($(PC_NAME), lpdpc34)
+    PLATFORM_KNOWN = 1
+    CXXFLAGS += -DHASWELL
+    PLATFORM_NUMA = 0
+endif
+
+ifeq ($(PC_NAME), lpdpc4)
+    PLATFORM_KNOWN = 1
+    CXXFLAGS += -DLPDPC4
+    PLATFORM_NUMA = 0
+endif
+
+ifeq ($(PC_NAME), diassrv8)
+    PLATFORM_KNOWN = 1
+    CXXFLAGS += -DXEON -DPLATFORM_MCORE
+    PLATFORM_NUMA = 1
+endif
+
+ifeq ($(PC_NAME), maglite)
+    PLATFORM_KNOWN = 1
+    CC = $(SOLARIS_CC1)
+    CXXFLAGS += -DMAGLITE
+endif
+
+ifeq ($(PC_NAME), ol-collab1)
+    PLATFORM_KNOWN = 1
+ifdef LOCK
+    LOCK = TICKET
+endif
+    CC = $(SOLARIS_CC2)
+    CXXFLAGS += -DT44
+endif
+
+ifeq ($(PC_NAME), iccluster033)
+    PLATFORM_KNOWN = 1
+    CXXFLAGS += -DICCLUSTER -DPLATFORM_MCORE
+    PLATFORM_NUMA = 0   
+endif
+
+ifneq ($(PLATFORM_KNOWN), 1)
+    CXXFLAGS += -DDEFAULT
+    PLATFORM_NUMA = 0
+    CORE_NUM ?= $(shell nproc)
+    CORE_SPEED_KHz := $(shell cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)
+    FREQ_GHZ := $(shell echo "scale=3; ${CORE_SPEED_KHz}/1000000" | bc -l)
+    $(info ********************************** Using as a default number of cores: $(CORE_NUM) on 1 socket)
+    $(info ********************************** Using as a default frequency      : $(FREQ_GHZ) GHz)
+    $(info ********************************** If incorrect, create a manual entry in common/Makefile.common)
+    CXXFLAGS += -DCORE_NUM=${CORE_NUM}
+    CXXFLAGS += -DFREQ_GHZ=${FREQ_GHZ}
+endif
+
+#################################
+# Architecture dependent settings
+#################################
+
+ifndef ARCH
+    ARCH_NAME = $(shell uname -m)
+endif
+
+ifeq ($(ARCH_NAME), i386)
+    ARCH = x86
+    CXXFLAGS += -m32
+    LDFLAGS += -m32
+    SSPFD = -lsspfd_x86
+    LDFLAGS += -L$(LIBSSMEM)/lib -lssmem_x86
+endif
+
+ifeq ($(ARCH_NAME), i686)
+    ARCH = x86
+    CXXFLAGS += -m32
+    LDFLAGS += -m32
+    SSPFD = -lsspfd_x86
+    LDFLAGS += -L$(LIBSSMEM)/lib -lssmem_x86
+endif
+
+ifeq ($(ARCH_NAME), x86_64)
+    ARCH = x86_64
+    CXXFLAGS += -m64
+    LDFLAGS += -m64
+    SSPFD = -lsspfd_x86_64
+    # LDFLAGS += -L$(LIBSSMEM)/lib -lssmem_x86_64
+endif
+
+ifeq ($(ARCH_NAME), sun4v)
+    ARCH = sparc64
+    CXXFLAGS += -DSPARC=1 -DINLINED=1 -m64
+    LDFLAGS += -lrt -m64
+    SSPFD = -lsspfd_sparc64
+    LDFLAGS += -L$(LIBSSMEM)/lib -lssmem_sparc64
+endif
+
+ifeq ($(ARCH_NAME), tile)
+    LDFLAGS += -L$(LIBSSMEM)/lib -lssmem_tile
+    SSPFD = -lsspfd_tile
+endif
+
+
+ifeq ($(PLATFORM_NUMA), 1)
+    LDFLAGS += -lnuma
+endif
+
+
+#################
+# Global settings
+#################
+
+CXXFLAGS += -Wall
+CXXFLAGS += -fno-strict-aliasing -Wno-sign-compare
+# CXXFLAGS += -I$(LIBAO_INC) -I$(ROOT)/include -I$(LIBSSMEM)/include
+
+LDFLAGS += -lpthread -lrt -lm
+
+######################
+# compilation settings
+######################
+
+TEST_FILE = test_simple.c
+ifeq ($(TEST),old)
+	TEST_FILE = test.c
+	CXXFLAGS += -DGC=0
+else
+
+	ifeq ($(TEST),correct)
+		TEST_FILE=test_correct.c
+		CXXFLAGS += -DGC=1
+
+	else
+		ifeq ($(TEST),fail)
+			TEST_FILE=test_fail.c
+		endif
+
+		ifeq ($(GC),0)
+			CXXFLAGS += -DGC=0
+		else
+			CXXFLAGS += -DGC=1
+		endif
+	endif
+
+endif
+
+ifeq ($(LATENCY),1)
+	CXXFLAGS += -DCOMPUTE_LATENCY -DDO_TIMINGS
+endif
+
+ifeq ($(LATENCY),2)
+	CXXFLAGS += -DCOMPUTE_LATENCY -DDO_TIMINGS -DUSE_SSPFD -DLATENCY_ALL_CORES=0
+	LDFLAGS += $(SSPFD) -lm
+endif
+
+ifeq ($(LATENCY),3)
+	CXXFLAGS += -DCOMPUTE_LATENCY -DDO_TIMINGS -DUSE_SSPFD -DLATENCY_ALL_CORES=1
+	LDFLAGS += $(SSPFD) -lm
+endif
+
+ifeq ($(LATENCY),4)
+	CXXFLAGS += -DCOMPUTE_LATENCY -DDO_TIMINGS -DUSE_SSPFD -DLATENCY_PARSING=1
+	LDFLAGS += $(SSPFD) -lm
+endif
+
+ifeq ($(LATENCY),5)
+	CXXFLAGS += -DCOMPUTE_LATENCY -DDO_TIMINGS -DUSE_SSPFD -DLATENCY_PARSING=1 -DLATENCY_ALL_CORES=1
+	LDFLAGS += $(SSPFD) -lm
+endif
+
+
+ifeq ($(INIT),all)
+	CXXFLAGS += -DINITIALIZE_FROM_ONE=0
+else
+	CXXFLAGS += -DINITIALIZE_FROM_ONE=1
+endif
+
+ifeq ($(COLLECT_STATS),1)
+    CXXFLAGS += -DCOLLECT_STATS
+endif
+
+ifeq ($(INIT),seq)
+    CXXFLAGS += -DINIT_SEQ
+else
+    ifeq ($(INIT), random)
+        CXXFLAGS += -DINIT_UNIQUE_RANDOM
+    else
+#        ifeq ($(INIT), compact)
+#            CXXFLAGS += -DINIT_COMPACT
+#        else
+            CXXFLAGS += -DNO_INIT_FILL
+#        endif
+    endif
+endif
+
+ifdef N_DRAINING_THREADS
+    CXXFLAGS += -DDRAINING_THREADS=$(N_DRAINING_THREADS)
+endif
+
+ifeq ($(SKEW9010),1)
+    CXXFLAGS += -DSKEW9010
+endif
+
+ifdef SKEW
+    CXXFLAGS += -DSKEW=$(SKEW)
+endif
+
+ifeq ($(MEM),big)
+    CXXFLAGS += -DBIGMEM
+endif
+
+ifeq ($(MEM),medium)
+    CXXFLAGS += -DMEDMEM
+endif
+
+ifdef MSL
+    CXXFLAGS += -DMSL=$(MSL)
+endif
+
+ifdef MHT
+    CXXFLAGS += -DMHT=$(MHT)
+endif
+
+ifeq ($(ONEWRITER),1)
+    CXXFLAGS += -DONEWRITER
+endif
+
+ifeq ($(TIME_TEST),1)
+    CXXFLAGS += -DTIME_TEST
+endif
+
+ifeq ($(SCANS),1)
+    CXXFLAGS += -DSCANS
+endif
+
+ifneq ($(TIGHT_ALLOC),0)
+    CXXFLAGS += -DTIGHT_ALLOC
+endif
+
+ifeq ($(DUMMY_PERSIST),1)
+    CXXFLAGS += -DDUMMY_PERSIST
+endif
+
+ifneq ($(USE_HT),0)
+    CXXFLAGS += -DUSE_HT
+endif
+
+ifdef CLHT_K
+    CXXFLAGS += -DCLHT_K=$(CLHT_K)
+endif
+
+ifeq ($(ASCY_MEMTABLE),1)
+    CXXFLAGS += -DASCY_MEMTABLE=1
+endif
+
+ifeq ($(ASCY_MEMTABLE),2)
+    CXXFLAGS += -DASCY_MEMTABLE=2
+endif
+
+ifeq ($(ASCY_MEMTABLE),3)
+    CXXFLAGS += -DASCY_MEMTABLE=3
+endif
+
+ifeq ($(SET_CPU),0)
+	CXXFLAGS += -DNO_SET_CPU
+endif
+
+ifeq ($(POWER),1)
+	CXXFLAGS += -DRAPL_READ_ENABLE=1
+	ifeq ($(PLATFORM_NUMA), 1)
+		LDFLAGS += -lraplread -lm
+	else
+		LDFLAGS += -lraplread1 -lm
+	endif
+endif
+
+ifeq ($(STATS),1)
+	CXXFLAGS += -DRETRY_STATS=1
+endif
+
+ifeq ($(PAD),1)
+	CXXFLAGS += -DDO_PAD=1
+endif
+
+ifeq ($(SEQ_NO_FREE),1)
+	CXXFLAGS += -DSEQ_SSMEM_NO_FREE=1
+endif
