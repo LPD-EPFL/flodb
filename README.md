@@ -77,24 +77,29 @@ where:
 
 Example workflow:
 
-Initialize the database:
-Set the desired path of the database files in `db_test.cc`.
-Compile with the INIT flag set (e.g., INIT=random)
+1. Initialize the database:
+    
+    i. Set the desired path of the database files in `db_test.cc`.
+    
+    ii. Compile with the INIT flag set (e.g., INIT=random)
 
     `make db_test MHT=1 MSL=96 ASCY_MEMTABLE=3 N_DRAINING_THREADS=1  COLLECT_STATS=1 INIT=random`
 
-To initialize for later experiments, run with 0% updates, a short test duration (e.g., -d1), a long post-initialization wait to allow enough time for all compactions to finish (e.g., -w3000) 
+    iii. To initialize for later experiments, run with 0% updates, a short test duration (e.g., -d1), a long post-initialization wait to allow enough time for all compactions to finish (e.g., -w3000) 
 
     ./db_test -n1 -i200000000 -u0 -d1 -w3000
 
-Run tests from existing database:
-Leave the same path as for the initialization run
-Compile with the INIT flag not set
+2. Run tests from existing database:
+   
+    i. Leave the same path as for the initialization run
+    
+    ii. Compile with the INIT flag not set
 
     `make clean; make db_test MHT=1 MSL=96 ASCY_MEMTABLE=3 N_DRAINING_THREADS=1  COLLECT_STATS=1`
 
-(Optional) Make a backup of the database to a different location so that the same initialized db can be reused in later experiments
-Run `db_test` with a short post-initialization wait (e.g., -w1), with the same value for the initial number of keys in the store (IMPORTANT) and with the other parameters as desired 
+    iii. (Optional) Make a backup of the database to a different location so that the same initialized db can be reused in later experiments
+    
+    iv. Run `db_test` with a short post-initialization wait (e.g., -w1), with the same value for the initial number of keys in the store (IMPORTANT) and with the other parameters as desired 
 
     ./db_test -n16 -i200000000 -u50 -d10000 -w1
 
@@ -105,7 +110,7 @@ Run `db_test` with a short post-initialization wait (e.g., -w1), with the same v
 
 Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
 
-# Features
+## Features
   * Keys and values are arbitrary byte arrays.
   * Data is stored sorted by key.
   * Callers can provide a custom comparison function to override the sort order.
@@ -118,18 +123,18 @@ Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
   * [Detailed documentation](http://htmlpreview.github.io/?https://github.com/google/leveldb/blob/master/doc/index.html) about how to use the library is included with the source code.
 
 
-# Limitations
+## Limitations
   * This is not a SQL database.  It does not have a relational data model, it does not support SQL queries, and it has no support for indexes.
   * Only a single process (possibly multi-threaded) can access a particular database at a time.
   * There is no client-server support builtin to the library.  An application that needs such support will have to wrap their own server around the library.
 
-# Performance
+## Performance
 
 Here is a performance report (with explanations) from the run of the
 included db_bench program.  The results are somewhat noisy, but should
 be enough to get a ballpark performance estimate.
 
-## Setup
+### Setup
 
 We use a database with a million entries.  Each entry has a 16 byte
 key, and a 100 byte value.  Values used by the benchmark compress to
@@ -145,7 +150,7 @@ about half their original size.
     Raw Size:   110.6 MB (estimated)
     File Size:  62.9 MB (estimated)
 
-## Write performance
+### Write performance
 
 The "fill" benchmarks create a brand new database, in either
 sequential, or random order.  The "fillsync" benchmark flushes data
@@ -169,7 +174,7 @@ responding before the data has been written to the platter.  This may
 or may not be safe based on whether or not the hard disk has enough
 power to save its memory in the event of a power failure.
 
-## Read performance
+### Read performance
 
 We list the performance of reading sequentially in both the forward
 and reverse direction, and also the performance of a random lookup.
